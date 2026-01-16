@@ -1,0 +1,68 @@
+import os
+import cv2
+from ultralytics import YOLO
+import time
+import pyttsx3
+
+# --- Ensure no display errors in headless mode ---
+os.environ["DISPLAY"] = ":0"
+cv2.namedWindow = lambda *a, **kw: None
+
+print("✅ Starting YOLO headless detection with voice alerts...")
+
+# --- Initialize Text-to-Speech engine ---
+engine = pyttsx3.init()
+engine.setProperty('rate', 150)  # voice speed
+engine.setProperty('volume', 1.0)  # full volume
+
+# --- Load YOLO model ---
+model = YOLO("/home/depaul/my_project/yolov8n.pt")
+
+# --- Initialize camera ---
+cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    print("❌ Camera not detected!")
+    exit()
+
+last_speak_time = 0
+speak_delay = 3  # seconds between voice alerts
+
+try:
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("⚠️ Frame not received.")
+            time.sleep(1)
+            continue
+
+        # Run YOLO detection
+        results = model(frame, verbose=False)
+
+        # Speak only the most confident detection
+        for r in results:
+            boxes = r.boxes
+            if len(boxes) > 0:
+                best_box = max(boxes, key=lambda b: b.conf[0])
+                cls = int(best_box.cls[0])
+                conf = float(best_box.conf[0])
+                name = model.names[cls]
+                print(f"Detected: {name} ({conf:.2f})")
+
+                # Speak once every few seconds
+                current_time = time.time()
+                if current_time - last_speak_time > speak_delay:
+                    engine.say(f"{name} ahead")
+                    engine.runAndWait()
+                    last_speak_time = current_time
+
+        time.sleep(0.3)
+
+except KeyboardInterrupt:
+    print("🛑 Exiting detection...")
+
+finally:
+    cap.release()
+    cv2.destroyAllWindows()
+
+
